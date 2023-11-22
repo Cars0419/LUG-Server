@@ -7,6 +7,7 @@
 
 #include <Windows.h>
 #include <Dbghelp.h>
+#include <string.h>
 
 #include "Game.h"
 #include "dLogger.h"
@@ -28,6 +29,27 @@ void make_minidump(EXCEPTION_POINTERS* e) {
 			"_%4d%02d%02d_%02d%02d%02d.dmp",
 			t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
 	}
+
+	// Get the exception record
+    const auto exceptionRecord = e->ExceptionRecord;
+
+    // Get the exception code
+    const auto exceptionCode = exceptionRecord->ExceptionCode;
+
+    // Convert the exception code to a human-readable message
+    char exceptionMessageBuffer[1024];
+    FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM,
+        nullptr,
+        exceptionCode,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        exceptionMessageBuffer,
+        sizeof(exceptionMessageBuffer),
+        nullptr
+    );
+
+	Game::logger->Log("Diagnostics", "Exception Message: " + std::string(exceptionMessageBuffer));
+
 	Game::logger->Log("Diagnostics", "Creating crash dump %s", name);
 	auto hFile = CreateFileA(name, GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
 	if (hFile == INVALID_HANDLE_VALUE)

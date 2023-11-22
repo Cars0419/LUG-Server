@@ -289,7 +289,9 @@ void UserManager::CreateCharacter(const SystemAddress& sysAddr, Packet* packet) 
 	}
 
 	//Now that the name is ok, we can get an objectID from Master:
+	Game::logger->Log("Gnome", "requesting objectID from MasterServer");
 	ObjectIDManager::Instance()->RequestPersistentID([=](uint32_t objectID) {
+		Game::logger->Log("Gnome", "Callback called? " + std::to_string(objectID));
 		sql::PreparedStatement* overlapStmt = Database::CreatePreppedStmt("SELECT id FROM charinfo WHERE id = ?");
 		overlapStmt->setUInt(1, objectID);
 
@@ -314,6 +316,7 @@ void UserManager::CreateCharacter(const SystemAddress& sysAddr, Packet* packet) 
 		std::string xmlSave1 = xml.str();
 
 		ObjectIDManager::Instance()->RequestPersistentID([=](uint32_t idforshirt) {
+			Game::logger->Log("Gnome", "Got id for shirt: " + std::to_string(idforshirt));
 			std::stringstream xml2;
 
 			LWOOBJID lwoidforshirt = idforshirt;
@@ -324,6 +327,7 @@ void UserManager::CreateCharacter(const SystemAddress& sysAddr, Packet* packet) 
 			std::string xmlSave2 = xml2.str();
 
 			ObjectIDManager::Instance()->RequestPersistentID([=](uint32_t idforpants) {
+				Game::logger->Log("Gnome", "Got id for pants: " + std::to_string(idforpants));
 				LWOOBJID lwoidforpants = idforpants;
 				GeneralUtils::SetBit(lwoidforpants, eObjectBits::CHARACTER);
 				GeneralUtils::SetBit(lwoidforpants, eObjectBits::PERSISTENT);
@@ -333,27 +337,38 @@ void UserManager::CreateCharacter(const SystemAddress& sysAddr, Packet* packet) 
 
 				xml3 << "</in></items></inv><lvl l=\"1\" cv=\"1\" sb=\"500\"/><flag></flag></obj>";
 
-				//Check to see if our name was pre-approved:
-				bool nameOk = IsNamePreapproved(name);
-				if (!nameOk && u->GetMaxGMLevel() > eGameMasterLevel::FORUM_MODERATOR) nameOk = true;
+				// name is always approved:
+				bool nameOk = true;
 
 				if (name != "") {
+					Game::logger->Log("Gnome", "Preparing charinfo insert");
+
 					sql::PreparedStatement* stmt = Database::CreatePreppedStmt("INSERT INTO `charinfo`(`id`, `account_id`, `name`, `pending_name`, `needs_rename`, `last_login`) VALUES (?,?,?,?,?,?)");
 					stmt->setUInt(1, objectID);
-					stmt->setUInt(2, u->GetAccountID());
-					stmt->setString(3, predefinedName.c_str());
-					stmt->setString(4, name.c_str());
-					stmt->setBoolean(5, false);
-					stmt->setUInt64(6, time(NULL));
+                    stmt->setUInt(2, u->GetAccountID());
+                    stmt->setString(3, "Somethingstupid");
+                    stmt->setString(4, "");
+                    stmt->setBoolean(5, false);
+                    stmt->setUInt64(6, time(NULL));
 
-					if (nameOk) {
-						stmt->setString(3, name.c_str());
-						stmt->setString(4, "");
-					}
 
-					stmt->execute();
+					try {
+						stmt->execute();
+					} catch (const sql::SQLException& e) {
+						std::cout << "SQL Exception: " << e.what() << std::endl;
+
+						// Re-throw the exception to ensure proper shutdown
+						throw;
+					} catch (const std::exception& e) {
+						std::cout << "Exception caught: " << e.what() << std::endl;
+
+						// Re-throw the exception to ensure proper shutdown
+						throw;
+					} 
 					delete stmt;
 				} else {
+					Game::logger->Log("Gnome", "We don't have a name PepeLaugh");
+
 					sql::PreparedStatement* stmt = Database::CreatePreppedStmt("INSERT INTO `charinfo`(`id`, `account_id`, `name`, `pending_name`, `needs_rename`, `last_login`) VALUES (?,?,?,?,?,?)");
 					stmt->setUInt(1, objectID);
 					stmt->setUInt(2, u->GetAccountID());
@@ -366,11 +381,13 @@ void UserManager::CreateCharacter(const SystemAddress& sysAddr, Packet* packet) 
 					delete stmt;
 				}
 
+				Game::logger->Log("Gnome", "preparing charxml insert");
 				//Now finally insert our character xml:
 				sql::PreparedStatement* stmt = Database::CreatePreppedStmt("INSERT INTO `charxml`(`id`, `xml_data`) VALUES (?,?)");
 				stmt->setUInt(1, objectID);
 				stmt->setString(2, xml3.str().c_str());
 				stmt->execute();
+			 
 				delete stmt;
 
 				WorldPackets::SendCharacterCreationResponse(sysAddr, eCharacterCreationResponse::SUCCESS);
